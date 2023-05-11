@@ -348,6 +348,22 @@ func (ec *elfCode) loadProgramSections() (map[string]*ProgramSpec, error) {
 		}
 	}
 
+	// replace calls to sayhello by calls to sayfoo
+	for _, prog := range progs {
+		for i, ins := range prog.Instructions {
+			if !ins.IsFunctionCall() {
+				continue
+			}
+
+			if ins.Reference() != "sayhello" {
+				continue
+			}
+
+			prog.Instructions[i] = ins.WithReference("sayfoo")
+		}
+
+	}
+
 	flattenPrograms(progs, export)
 
 	// Hide programs (e.g. library functions) that were not explicitly emitted

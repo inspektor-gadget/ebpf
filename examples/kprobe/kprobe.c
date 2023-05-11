@@ -11,6 +11,19 @@ struct bpf_map_def SEC("maps") kprobe_map = {
 	.max_entries = 1,
 };
 
+__attribute__((noinline)) __u64 sayhello(void) {
+	bpf_printk("Hello, World!\n");
+	return 0;
+}
+
+__attribute__((noinline)) __u64 sayfoo(void) {
+	bpf_printk("Hello, Foo!\n");
+	bpf_printk("Hello, Foo1!\n");
+	bpf_printk("Hello, Foo2!\n");
+	bpf_printk("Hello, Foo3!\n");
+	return 0;
+}
+
 SEC("kprobe/sys_execve")
 int kprobe_execve() {
 	u32 key     = 0;
@@ -22,6 +35,8 @@ int kprobe_execve() {
 		return 0;
 	}
 	__sync_fetch_and_add(valp, 1);
+
+	sayhello();
 
 	return 0;
 }
