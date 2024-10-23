@@ -29,6 +29,24 @@ func FlushKernelSpec() {
 	kernelBTF.modules = make(map[string]*Spec)
 }
 
+// KernelHasBTF checks if the kernel provides its BTF information without
+// actually loading the spec.
+func KernelHasBTF() bool {
+	fh, err := os.Open("/sys/kernel/btf/vmlinux")
+	if err == nil {
+		defer fh.Close()
+		return true
+	}
+
+	fh, err = findVMLinux()
+	if err == nil {
+		defer fh.Close()
+		return true
+	}
+
+	return false
+}
+
 // LoadKernelSpec returns the current kernel's BTF information.
 //
 // Defaults to /sys/kernel/btf/vmlinux and falls back to scanning the file system
