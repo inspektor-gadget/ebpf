@@ -210,7 +210,7 @@ func TestTypeByName(t *testing.T) {
 	}
 }
 
-func BenchmarkParseVmlinux(b *testing.B) {
+func BenchmarkParseVmlinuxWithoutFilter(b *testing.B) {
 	rd := vmlinuxTestdataReader(b)
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -221,6 +221,40 @@ func BenchmarkParseVmlinux(b *testing.B) {
 		}
 
 		if _, err := loadRawSpec(rd, binary.LittleEndian, nil, nil); err != nil {
+			b.Fatal("Can't load BTF:", err)
+		}
+	}
+}
+
+func BenchmarkParseVmlinuxWithFilter(b *testing.B) {
+	rd := vmlinuxTestdataReader(b)
+	opts := &SpecOptions{
+		TypeNames: map[string]struct{}{
+			"task_struct":                        {},
+			"pt_regs":                            {},
+			"socket":                             {},
+			"fanotify_event":                     {},
+			"pid":                                {},
+			"trace_event_raw_sched_process_exec": {},
+			"syscall_trace_enter":                {},
+			"nsproxy":                            {},
+			//"mnt_namespace":                      {},
+			//"syscall_trace_exit":                 {},
+			//"mm_struct":                          {},
+			//"file":                               {},
+			//"inode":                              {},
+			//"super_block":                        {},
+		},
+	}
+	b.ReportAllocs()
+	b.ResetTimer()
+
+	for n := 0; n < b.N; n++ {
+		if _, err := rd.Seek(0, io.SeekStart); err != nil {
+			b.Fatal(err)
+		}
+
+		if _, err := loadRawSpec(rd, binary.LittleEndian, nil, opts); err != nil {
 			b.Fatal("Can't load BTF:", err)
 		}
 	}
