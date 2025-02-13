@@ -238,12 +238,13 @@ func BenchmarkParseVmlinuxWithFilter(b *testing.B) {
 			"trace_event_raw_sched_process_exec": {},
 			"syscall_trace_enter":                {},
 			"nsproxy":                            {},
-			//"mnt_namespace":                      {},
-			//"syscall_trace_exit":                 {},
-			//"mm_struct":                          {},
-			//"file":                               {},
-			//"inode":                              {},
-			//"super_block":                        {},
+			"mnt_namespace":                      {},
+			"syscall_trace_exit":                 {},
+			"mm_struct":                          {},
+			"file":                               {},
+			"inode":                              {},
+			"super_block":                        {},
+			"sock":                               {},
 		},
 	}
 	b.ReportAllocs()
@@ -257,6 +258,37 @@ func BenchmarkParseVmlinuxWithFilter(b *testing.B) {
 		if _, err := loadRawSpec(rd, binary.LittleEndian, nil, opts); err != nil {
 			b.Fatal("Can't load BTF:", err)
 		}
+	}
+}
+
+func TestParseVmlinuxWithFilter(t *testing.T) {
+	rd := vmlinuxTestdataReader(t)
+	opts := &SpecOptions{
+		TypeNames: map[string]struct{}{
+			"task_struct":                        {},
+			"pt_regs":                            {},
+			"socket":                             {},
+			"fanotify_event":                     {},
+			"pid":                                {},
+			"trace_event_raw_sched_process_exec": {},
+			"syscall_trace_enter":                {},
+			"nsproxy":                            {},
+			"mnt_namespace":                      {},
+			"syscall_trace_exit":                 {},
+			"mm_struct":                          {},
+			"file":                               {},
+			"inode":                              {},
+			"super_block":                        {},
+			"sock":                               {},
+		},
+	}
+
+	if _, err := rd.Seek(0, io.SeekStart); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := loadRawSpec(rd, binary.LittleEndian, nil, opts); err != nil {
+		t.Fatal("Can't load BTF:", err)
 	}
 }
 

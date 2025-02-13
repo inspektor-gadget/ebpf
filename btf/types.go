@@ -780,15 +780,13 @@ func readAndInflateTypes(r io.Reader, reset func(int64), bo binary.ByteOrder, ty
 	types := make([]Type, 0, tyMaxCount)
 
 	offsets := make([]int, 0, tyMaxCount)
-	keep := make([]bool, 0, tyMaxCount)
+	visited := make([]bool, 0, tyMaxCount)
 	newIdx := make([]int, 0, tyMaxCount)
 
 	remainingIdxToProcess := []int{}
 
 	// Void is defined to always be type ID 0, and is thus omitted from BTF.
 	types = append(types, (*Void)(nil))
-
-	fmt.Printf("DEBUG: readAndInflateTypes called typeLen=%d opts=%+v\n", typeLen, opts)
 
 	firstTypeID := TypeID(0)
 	firstTypeIDWithoutVoid := TypeID(1)
@@ -827,16 +825,11 @@ func readAndInflateTypes(r io.Reader, reset func(int64), bo binary.ByteOrder, ty
 		}
 		newTypeIdx := int(rawID - firstTypeIDWithoutVoid)
 
-		if rawID == 11207 {
-			//panic("append 11207")
+		if visited[newTypeIdx] {
+			return
 		}
-		if keep[newTypeIdx] {
-			return // already marked
-		}
-		//fmt.Printf("DEBUG: appendItem %d\n", rawID)
-		newIdx[newTypeIdx] = len(types) + len(remainingIdxToProcess)
 		remainingIdxToProcess = append(remainingIdxToProcess, newTypeIdx)
-		keep[newTypeIdx] = true
+		visited[newTypeIdx] = true
 	}
 
 	type bitfieldFixupDef struct {
@@ -953,13 +946,12 @@ func readAndInflateTypes(r io.Reader, reset func(int64), bo binary.ByteOrder, ty
 
 		offsets = append(offsets, curOffset)
 		if keepTypeName(opts, name) {
-			keep = append(keep, true)
-			newIdx = append(newIdx, idx)
+			visited = append(visited, true)
 			remainingIdxToProcess = append(remainingIdxToProcess, idx)
 		} else {
-			keep = append(keep, false)
-			newIdx = append(newIdx, -1)
+			visited = append(visited, false)
 		}
+		newIdx = append(newIdx, -1)
 		idx++
 
 		curOffset += btfTypeLen
@@ -1055,10 +1047,6 @@ func readAndInflateTypes(r io.Reader, reset func(int64), bo binary.ByteOrder, ty
 
 		case kindPointer:
 			ptr := &Pointer{nil}
-			if header.Type() == 11207 {
-				fmt.Printf("pos=%d len(types)=%d base=%v firstTypeID %d %d\n", pos, len(types), base, firstTypeID, firstTypeIDWithoutVoid)
-				//panic("append 11207")
-			}
 			appendItem(header.Type())
 			fixup(header.Type(), &ptr.Target)
 			typ = ptr
@@ -1298,22 +1286,9 @@ func readAndInflateTypes(r io.Reader, reset func(int64), bo binary.ByteOrder, ty
 			return nil, fmt.Errorf("type pos %d: unknown kind: %v", pos, header.Kind())
 		}
 
+		newIdx[pos] = len(types)
 		types = append(types, typ)
 	}
-
-	countKeep := 0
-	for i := range keep {
-		if keep[i] {
-			countKeep++
-		}
-	}
-	countNewIdx := 0
-	for i := range newIdx {
-		if newIdx[i] != -1 {
-			countNewIdx++
-		}
-	}
-	fmt.Printf("DEBUG: readAndInflateTypes: countKeep=%d countNewIdx=%d len(types)=%d processedCount=%d\n", countKeep, countNewIdx, len(types), processedCount)
 
 	for _, fixup := range fixups {
 		if fixup.id < firstTypeID {
@@ -1329,8 +1304,6 @@ func readAndInflateTypes(r io.Reader, reset func(int64), bo binary.ByteOrder, ty
 		idx = newIdx[idx]
 		if idx == -1 {
 			return nil, fmt.Errorf("reference to skipped type id: %d", fixup.id)
-		} else {
-			idx += int(firstTypeIDWithoutVoid) - int(firstTypeID)
 		}
 
 		if idx >= len(types) {
@@ -1355,8 +1328,6 @@ func readAndInflateTypes(r io.Reader, reset func(int64), bo binary.ByteOrder, ty
 		idx = TypeID(newIdx[idx])
 		if int(idx) == -1 {
 			return nil, fmt.Errorf("reference to skipped type id: %d", bitfieldFixup.id)
-		} else {
-			idx += firstTypeIDWithoutVoid - firstTypeID
 		}
 
 		data, ok := legacyBitfields[idx]
