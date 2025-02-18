@@ -166,7 +166,7 @@ func TestMarshalDeclTags(t *testing.T) {
 	})
 	qt.Assert(t, qt.IsNil(err))
 
-	spec, err := loadRawSpec(bytes.NewReader(buf), internal.NativeEndian, nil)
+	spec, err := loadRawSpec(bytes.NewReader(buf), internal.NativeEndian, nil, nil)
 	qt.Assert(t, qt.IsNil(err))
 
 	var td *Typedef
@@ -197,7 +197,7 @@ func TestMarshalTypeTags(t *testing.T) {
 	})
 	qt.Assert(t, qt.IsNil(err))
 
-	spec, err := loadRawSpec(bytes.NewReader(buf), internal.NativeEndian, nil)
+	spec, err := loadRawSpec(bytes.NewReader(buf), internal.NativeEndian, nil, nil)
 	qt.Assert(t, qt.IsNil(err))
 
 	var td *Typedef

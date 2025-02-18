@@ -14,8 +14,10 @@ import (
 
 var kernelBTF = struct {
 	sync.RWMutex
-	kernel  *Spec
-	modules map[string]*Spec
+	kernel   *Spec
+	fullSpec bool
+	opts     *SpecOptions
+	modules  map[string]*Spec
 }{
 	modules: make(map[string]*Spec),
 }
@@ -54,9 +56,51 @@ func KernelHasBTF() bool {
 //
 // The provided options are used to configure the BTF loading process.
 func LoadKernelSpecWithOptions(opts *SpecOptions) (*Spec, error) {
-	spec, _, err := loadKernelSpec(opts)
-	// without copy
-	return spec, err
+	//fmt.Printf("LoadKernelSpecWithOptions\n")
+	kernelBTF.RLock()
+	fullSpec := kernelBTF.fullSpec
+	kernelBTF.RUnlock()
+
+	// Remove after finding all spots in IG
+	if opts == nil {
+		panic("TODO: Why are you calling this without opts?")
+	}
+
+	// Full spec was already requested and everything got loaded
+	if fullSpec || opts == nil {
+		return LoadKernelSpec()
+	}
+
+	// TODO: minimize critical section
+	kernelBTF.Lock()
+	defer kernelBTF.Unlock()
+
+	if kernelBTF.opts == nil {
+		newSpec, _, err := loadKernelSpec(opts)
+		if err != nil {
+			return nil, err
+		}
+		kernelBTF.opts = opts
+		kernelBTF.kernel = newSpec
+		return newSpec.Copy(), nil
+	}
+
+	for typeName := range opts.TypeNames {
+		kernelBTF.opts.TypeNames[typeName] = struct{}{}
+	}
+
+	newSpec, _, err := loadKernelSpec(kernelBTF.opts)
+	if err != nil {
+		return nil, err
+	}
+
+	kernelBTF.kernel.mu.Lock()
+	kernelBTF.kernel.imm.types = newSpec.imm.types
+	kernelBTF.kernel.imm.typeIDs = newSpec.imm.typeIDs
+	kernelBTF.kernel.imm.namedTypes = newSpec.imm.namedTypes
+	kernelBTF.kernel.mu.Unlock()
+
+	return kernelBTF.kernel.Copy(), nil
 }
 
 // LoadKernelSpec returns the current kernel's BTF information.
@@ -66,7 +110,11 @@ func LoadKernelSpecWithOptions(opts *SpecOptions) (*Spec, error) {
 func LoadKernelSpec() (*Spec, error) {
 	kernelBTF.RLock()
 	spec := kernelBTF.kernel
+	// This is for sure not truly thread safe by design with this variable on its own
+	// It only works because LoadKernelSpecWithOptions calls us and we are thread safe against us
+	kernelBTF.fullSpec = true
 	kernelBTF.RUnlock()
+	//fmt.Printf("LoadKernelSpec\n")
 
 	if spec == nil {
 		kernelBTF.Lock()

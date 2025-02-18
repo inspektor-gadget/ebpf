@@ -126,24 +126,34 @@ func hasFunctionReferences(insns asm.Instructions) bool {
 func applyRelocations(insns asm.Instructions, targets []*btf.Spec, kmodName string, bo binary.ByteOrder, b *btf.Builder) error {
 	var relos []*btf.CORERelocation
 	var reloInsns []*asm.Instruction
+
+	specOpts := &btf.SpecOptions{
+		TypeNames: map[string]struct{}{},
+	}
+
 	iter := insns.Iterate()
 	for iter.Next() {
 		if relo := btf.CORERelocationMetadata(iter.Ins); relo != nil {
 			relos = append(relos, relo)
 			reloInsns = append(reloInsns, iter.Ins)
+			specOpts.TypeNames[relo.TypeName()] = struct{}{}
 		}
 	}
 
 	if len(relos) == 0 {
 		return nil
 	}
+	if len(specOpts.TypeNames) == 0 {
+		specOpts = nil
+	}
+	//specOpts = nil
 
 	if bo == nil {
 		bo = internal.NativeEndian
 	}
 
 	if len(targets) == 0 {
-		kernelTarget, err := btf.LoadKernelSpec()
+		kernelTarget, err := btf.LoadKernelSpecWithOptions(specOpts)
 		if err != nil {
 			return fmt.Errorf("load kernel spec: %w", err)
 		}
