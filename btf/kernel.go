@@ -3,6 +3,7 @@ package btf
 import (
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"path/filepath"
 	"sync"
@@ -16,7 +17,6 @@ var kernelBTF = struct {
 	sync.RWMutex
 	kernel   *Spec
 	fullSpec bool
-	opts     *SpecOptions
 	modules  map[string]*Spec
 }{
 	modules: make(map[string]*Spec),
@@ -71,34 +71,44 @@ func LoadKernelSpecWithOptions(opts *SpecOptions) (*Spec, error) {
 		return LoadKernelSpec()
 	}
 
+	// Work on a copy of the paramter
+	newOpts := &SpecOptions{
+		TypeNames: make(map[string]struct{}, len(opts.TypeNames)),
+	}
+	maps.Copy(newOpts.TypeNames, opts.TypeNames)
+
 	// TODO: minimize critical section
 	kernelBTF.Lock()
 	defer kernelBTF.Unlock()
 
-	if kernelBTF.opts == nil {
-		newSpec, _, err := loadKernelSpec(opts)
-		if err != nil {
-			return nil, err
+	needsUpdate := true
+	if kernelBTF.kernel != nil {
+		// Check if we already have all requested types
+		for _, t := range kernelBTF.kernel.imm.types {
+			newOpts.TypeNames[t.TypeName()] = struct{}{}
 		}
-		kernelBTF.opts = opts
-		kernelBTF.kernel = newSpec
-		return newSpec.Copy(), nil
+
+		needsUpdate = len(newOpts.TypeNames) > len(kernelBTF.kernel.imm.types)
 	}
 
-	for typeName := range opts.TypeNames {
-		kernelBTF.opts.TypeNames[typeName] = struct{}{}
+	if !needsUpdate {
+		return kernelBTF.kernel.Copy(), nil
 	}
 
-	newSpec, _, err := loadKernelSpec(kernelBTF.opts)
+	newSpec, _, err := loadKernelSpec(newOpts)
 	if err != nil {
 		return nil, err
 	}
 
-	kernelBTF.kernel.mu.Lock()
-	kernelBTF.kernel.imm.types = newSpec.imm.types
-	kernelBTF.kernel.imm.typeIDs = newSpec.imm.typeIDs
-	kernelBTF.kernel.imm.namedTypes = newSpec.imm.namedTypes
-	kernelBTF.kernel.mu.Unlock()
+	if kernelBTF.kernel == nil {
+		kernelBTF.kernel = newSpec
+	} else {
+		kernelBTF.kernel.mu.Lock()
+		kernelBTF.kernel.imm.types = newSpec.imm.types
+		kernelBTF.kernel.imm.typeIDs = newSpec.imm.typeIDs
+		kernelBTF.kernel.imm.namedTypes = newSpec.imm.namedTypes
+		kernelBTF.kernel.mu.Unlock()
+	}
 
 	return kernelBTF.kernel.Copy(), nil
 }
